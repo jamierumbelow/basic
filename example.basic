@@ -9,15 +9,15 @@
 
 ' The welcome section
 welcome:
-    print "Welcome to the BASIC Bank\n"
-    print "=========================\n"
-    print "\n"
+    print "Welcome to the BASIC Bank"
+    print "========================="
+    print ""
     
     goto new_account
     
 ' Setup a new account
 new_account:
-    print "What would you like to name your account?\n"
+    print "What would you like to name your account?"
     
     input account_name
     account_value = 0
@@ -26,8 +26,8 @@ new_account:
     
 ' The main loop
 main:
-    print "Welcome to your " + account_name + " bank account.\n"
-    print "What would you like to do? (withdraw, deposit, exit)\n"
+    print "Welcome to your " + account_name + " bank account."
+    print "What would you like to do? (withdraw, deposit, exit)"
     input command
     
     if command = "exit" then leave

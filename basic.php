@@ -11,19 +11,6 @@
  * @package basic
  **/
 
-// We need a file argument
-if (!isset($argv[1])) {
-	echo "\033[0;32mUsage: php basic.php <file>\n";
-	echo "\tWhere <file> is the basic file to parse\n\033[0m";
-}
-
-// Get the file
-$source = file_get_contents($argv[1]);
-
-// Create a new parser
-$basic = new Basic();
-$basic->interpret($source);
-
 /**
  * The main Basic class
  *
@@ -40,12 +27,11 @@ class Basic {
 	const TOKEN_NUMBER = 2;
 	const TOKEN_STRING = 3;
 	const TOKEN_LABEL = 4;
-	const TOKEN_NEWLINE = 5;
-	const TOKEN_EQUALS = 6;
-	const TOKEN_OPERATOR = 7;
-	const TOKEN_LEFTOKEN_PARENTHESIES = 8;
-	const TOKEN_RIGHTOKEN_PARENTHESIES = 9;
-	const TOKEN_EOF = 10;
+	const TOKEN_EQUALS = 5;
+	const TOKEN_OPERATOR = 6;
+	const TOKEN_LEFT_PARENTHESIES = 7;
+	const TOKEN_RIGHT_PARENTHESIES = 8;
+	const TOKEN_EOF = 9;
 	
 	/**
 	 * These constants represent the tokeniser's current state; the
@@ -61,6 +47,15 @@ class Basic {
 	const S_COMMENT = 5;
 	
 	/**
+	 * The Basic class acts as the lexer and intepreter, so we want to keep
+	 * track of a few bits during interpretation, including variables
+	 */
+	static public $variables = array();
+	static public $statements = array();
+	static public $labels = array();
+	static public $current_statement = 0;
+	
+	/**
 	 * This function runs the BASIC source through the interpretation
 	 * pipeline; tokenising, parsing and executing the code.
 	 *
@@ -71,13 +66,13 @@ class Basic {
 	public function interpret($source) {
 		// Tokenise
 		$tokens = $this->tokenise($source);
-		die(var_dump($tokens));
+		
 		// Parse
 		$parser = new Parser($tokens);
-		$statements = $parser->parse();
+		$parser->parse();
 		
 		// Loop through the statements and execute them
-		foreach ($statements as $statement) {
+		foreach (self::$statements as $statement) {
 			$statement->execute();
 		}
 	}
@@ -103,7 +98,6 @@ class Basic {
 		// Keep a one-to-one mapping of all the single-character tokens here
 		// in an array that we can pull out later.
 		$character_tokens = array(
-			"\n" => TOKEN_NEWLINE,
 			"=" => TOKEN_EQUALS,
 			"+" => TOKEN_OPERATOR,
 			"-" => TOKEN_OPERATOR,
@@ -275,3 +269,500 @@ class Token {
 		return (string)$this->type . ": <" . $this->token . ">";
 	}
 }
+
+/**
+ * The parser takes in an array of tokens and generates
+ * something called an AST (Abstract Syntax Tree). This is a
+ * data structure that contains all the statements and expressions
+ * inside the code.
+ *
+ * One of the reasons we tokenise the code first is that we can keep
+ * multiple levels in the AST, whereas the tokeniser is stuck at one level.
+ *
+ * @package basic
+ * @author Jamie Rumbelow
+ **/
+class Parser {
+	public $tokens = array();
+	public $position = 0;
+	public $line = 1;
+	
+	public function __construct($tokens) {
+		$this->tokens = $tokens;
+	}
+	
+	/**
+	 * The top level parsing function. This function loops through the
+	 * tokens and routes over to other methods that handle the language.
+	 *
+	 * @return array
+	 * @author Jamie Rumbelow
+	 */
+	public function parse() {
+		// Keep track of statements and labels
+		$statements = array();
+		$labels = array();
+		
+		// Infinite loop; we'll use $this->position to keep
+		// track of when we're done
+		while (TRUE) {			
+			// Is this a label?
+			if ($this->match(TOKEN_LABEL)) {
+				// Record this label, linking it to the current index of the 
+				// statements. This is so we can route the program flow later
+				$labels[$this->previous()->token] = (count($statements) > 0) ? count($statements) - 1 : 0;
+			}
+			
+			// Is it an assignment?
+			else if ($this->match(TOKEN_WORD, TOKEN_EQUALS)) {
+				// Create a new assignment statement with the current token text (the variable's name), and
+				// parse the expression
+				$statements[] = new AssignmentStatement($this->current()->token, $this->expression());
+			}
+			
+			// Is it a print statement?
+			else if ($this->current()->token == "print") {
+				// Parse the expression and create new print statement
+				$this->position++;
+				$statements[] = new PrintStatement($this->expression());
+			}
+			
+			// Is it an input statement?
+			else if ($this->current()->token == "input") {
+				// Get the next token (variable name) and create new input statement
+				// We're using next_token() to ensure that the next token is indeed a TOKEN_WORD.
+				$this->position++;
+				$statements[] = new InputStatement($this->next_token(TOKEN_WORD)->token);
+			}
+			
+			// Is it a goto statement?
+			else if ($this->current()->token == "goto") {
+				// Similar to above, get the next token (label to go to) and create new goto statement
+				$this->position++;
+				$statements[] = new GotoStatement($this->next_token(TOKEN_WORD)->token);
+			}
+			
+			// Is it an if statement?
+			else if ($this->current()->token == "if") {
+				// This is where it gets slightly more complex. We first want to parse an expression,
+				// which is the condition.
+				$this->position++;
+				$condition = $this->expression();
+				
+				// Then we want the "then" (using next_token_word() to check the $token->token value)
+				$this->next_token_word("then");
+				
+				// Then we want the label to go to
+				$label = $this->next_token(TOKEN_WORD)->token;
+				
+				// Create the new statement
+				$statements[] = new IfThenStatement($condition, $label);
+			}
+			
+			// Is it an exit statement?
+			else if ($this->current()->token == "exit") {
+				// Create new print statement
+				$this->position++;
+				$statements[] = new ExitStatement();
+			}
+			
+			// We're not sure what token this is, it's probably the end of the file. So, bye!
+			else {
+				break;
+			}
+		}
+		
+		// Store the statements and labels in the intepreter
+		Basic::$statements = $statements;
+		Basic::$labels = $labels;
+	}
+	
+	/**
+	 * Get the current token
+	 *
+	 * @return Token
+	 * @author Jamie Rumbelow
+	 **/
+	public function current() {
+		return $this->tokens[$this->position];
+	}
+	
+	/**
+	 * Get the next token, optionally offset
+	 *
+	 * @return Token
+	 * @author Jamie Rumbelow
+	 **/
+	public function next($offset = 0) {
+		return $this->tokens[$this->position + 1 + $offset];
+	}
+	
+	/**
+	 * Get the previous token, optionally offset
+	 *
+	 * @return Token
+	 * @author Jamie Rumbelow
+	 **/
+	public function previous($offset = 0) {
+		return $this->tokens[$this->position - 1 - $offset];
+	}
+	
+	/**
+	 * Get the next token, ensuring it is a specific type
+	 *
+	 * @return Token
+	 * @author Jamie Rumbelow
+	 **/
+	public function next_token($type) {
+		$token = $this->tokens[$this->position + 1];
+		
+		// Check the token and type match
+		if ($token->type == $type) {
+			return $token;
+		} else {
+			return FALSE;
+		}
+	}
+	
+	/**
+	 * Get the next token, ensuring it is has a particular word as it's text
+	 *
+	 * @return Token
+	 * @author Jamie Rumbelow
+	 **/
+	public function next_token_word($word) {
+		$token = $this->tokens[$this->position + 1];
+		
+		// Check the token and type match
+		if ($token->token == $word) {
+			return $token;
+		} else {
+			return FALSE;
+		}
+	}
+	
+	/**
+	 * Match the current token with $token_one, and the next
+	 * token with $token_two, if we pass it. Then move to the next token.
+	 *
+	 * If one token is passed, will return TRUE or FALSE if the current token matches.
+	 * If two are passed, BOTH are required to match
+	 *
+	 * @param string $token_one The first token
+	 * @param string | boolean $token_two The second token
+	 * @return boolean
+	 * @author Jamie Rumbelow
+	 */
+	public function match($token_one, $token_two = FALSE) {
+		if (!$token_two) {			
+			// Compare and return
+			if ((bool)($this->previous()->type == $token_one)) {
+				// Increment the position
+				$this->position++;
+				
+				return TRUE;
+			} else {
+				return FALSE;
+			}
+		}
+		
+		// We have two tokens
+		else {
+			// Check the first compares with the current
+			if ($this->current()->type == $token_one) {
+				// Check the second compares
+				if ($this->next()->type == $token_one) {
+					// Increment the position
+					$this->position++;
+					
+					// And success
+					return TRUE;
+				} else {
+					return FALSE;
+				}
+			} else {
+				return FALSE;
+			}
+		}
+	}
+	
+	/**
+	 * Parse an expression. We siphon this off to operator(),
+	 * as we start at the bottom of the precedence stack and rise up
+	 * and binary operators (+, -, et cetera) are the lowest.
+	 *
+	 * @author Jamie Rumbelow
+	 **/
+	public function expression() {
+		return $this->operator();
+	}
+	
+	/**
+	 * Parses a series of binary operator expressions into a single
+	 * expression. We do this by building the expression bit by bit.
+	 *
+	 * @author Jamie Rumbelow
+	 */
+	public function operator() {
+		// Look up what's to the left
+		$expression = $this->atomic();
+		
+		// As long as we have operators, keep building operator expressions
+		while ($this->next_token(TOKEN_OPERATOR) || $this->next_token(TOKEN_EQUALS)) {
+			// Get the operator
+			$operator = $this->previous()->token;
+			
+			// Look to the right, another atomic
+			$right = $this->atomic();
+			
+			// Set the expression
+			$expression = new OperatorExpression($expression, $operator, $right);
+		}
+		
+		// Return the final expression
+		return $expression;
+	}
+	
+	/**
+	 * Look for an atomic expression, which is a single literal
+	 * value such as a string or or a number. It's also possible we've
+	 * got another expression wrapped in parenthesis.
+	 *
+	 * @author Jamie Rumbelow
+	 **/
+	public function atomic() {
+		// Is it a word? Words reference variables
+		if ($this->match(TOKEN_WORD)) {
+			return new VariableExpression($this->previous()->token);
+		}
+		
+		// A number? Parse it as a float
+		else if ($this->match(TOKEN_NUMBER)) {
+			return new NumberExpression(floatval($this->previous()->token));
+		}
+		
+		// A string?
+		else if ($this->match(TOKEN_STRING)) {
+			return new StringExpression($this->previous()->token);
+		}
+		
+		// Left parenthesis, a new expression
+		else if ($this->match(TOKEN_LEFT_PARENTHESIES)) {
+			// Parse the expression and find the closing parenthesis
+			$expression = $this->expression();
+			$this->token_type(TOKEN_RIGHT_PARENTHESIES);
+			
+			// Return the expression
+			return $expression;
+		}
+		
+		// Give up & throw an error
+		throw new BasicParserException("Couldn't parse expression");
+	}
+}
+
+/**
+ * The base Statement interface. Statements do stuff when executed
+ */
+interface Statement {
+	public function execute();
+}
+
+/**
+ * The base Expression interface. Expressions return values when evaluated
+ **/
+interface Expression {
+	public function evaluate();
+}
+
+/**
+ * A "print" statement evaluates an expression, converts the result to a
+ * string, and displays it to the user.
+ */
+class PrintStatement implements Statement {
+	public function __construct($expression) {
+		$this->expression = $expression;
+	}
+	
+	public function execute() {
+		print $this->expression->evaluate() . "\n";
+	}
+}
+
+/**
+ * A "input" statement gets a line of input from the user and assigns it
+ * to a variable.
+ */
+class InputStatement implements Statement {
+	public function __construct($variable) {
+		$this->variable = $variable;
+	}
+	
+	public function execute() {
+		Basic::$variables[$this->variable] = fgets(fopen("php://stdin","r"));
+	}
+}
+
+/**
+ * An assignment statement assigns a variable with a value
+ */
+class AssignmentStatement implements Statement {
+	public function __construct($variable, $value) {
+		$this->variable = $variable;
+		$this->value = $value;
+	}
+	
+	public function execute() {
+		Basic::$variables[$this->variable] = $this->value->evaluate();
+	}
+}
+
+/**
+ * A goto statement moves the program execution flow to a labelled point.
+ */
+class GotoStatement implements Statement {
+	public function __construct($label) {
+		$this->label = $label;
+	}
+	
+	public function execute() {
+		if (isset(Basic::$labels[$this->label])) {
+			Basic::$current_statement = (int)Basic::$labels[$this->label];
+		}
+	}
+}
+
+/**
+ * An if-then statement jumps to
+ */
+class IfThenStatement implements Statement {
+	public function __construct($expression, $label) {
+		$this->expression = $expression;
+		$this->label = $label;
+	}
+	
+	public function execute() {
+		if ($this->expression->evaluate()) {
+			$goto = new GotoStatement($this->label);
+			$goto->execute();
+		}
+	}
+}
+
+/**
+ * A variable expression evaluates to the value of the variable
+ */
+class VariableExpression implements Expression {
+	public function __construct($variable) {
+		$this->variable = $variable;
+	}
+	
+	public function evaluate() {
+		if (isset(Basic::$variables[$this->variable])) {
+			return Basic::$variables[$this->variable];
+		} else {
+			return FALSE;
+		}
+	}
+}
+
+/**
+ * A number expression evaluates to a number
+ */
+class NumberExpression implements Expression {
+	public function __construct($number) {
+		$this->number = $number;
+	}
+	
+	public function evaluate() {
+		return $this->number;
+	}
+}
+
+/**
+ * A string expression evaluates to a string
+ */
+class StringExpression implements Expression {
+	public function __construct($string) {
+		$this->string = $string;
+	}
+	
+	public function evaluate() {
+		return $this->string;
+	}
+}
+
+/**
+ * An operator expression evaluates two expressions and then operates
+ * on them.
+ */
+class OperatorExpression implements Expression {
+	public function __construct($left, $operator, $right) {
+		$this->left = $left;
+		$this->operator = $operator;
+		$this->right = $right;
+	}
+	
+	public function evaluate() {
+		$left = $this->left->evaluate();
+		$right = $this->right->evaluate();
+		
+		switch ($this->operator) {
+			case '=':
+				if (is_string($left)) {
+					return (bool)($left == (string)$right);
+				} else {
+					return (bool)($left == (int)$right);
+				}
+				break;
+			
+			case '+':
+				if (is_string($left)) {
+					return $left .= (string)$right;
+				} else {
+					return $left + (int)$right;
+				}
+				break;
+				
+			case '-':
+				return $left - $right;
+				break;
+			
+			case '*':
+				return $left * $right;
+				break;
+				
+			case '/':
+				return $left / $right;
+				break;
+				
+			case '<':
+				return (bool)($left < $right);
+				break;
+			
+			case '>':
+				return (bool)($left > $right);
+				break;
+		}
+		
+		throw new BasicParserException("Unknown operator");
+	}
+}
+
+/**
+ * A basic parser exception class
+ **/
+class BasicParserException extends Exception { }
+
+// We need a file argument
+if (!isset($argv[1])) {
+	echo "\033[0;32mUsage: php basic.php <file>\n";
+	echo "\tWhere <file> is the basic file to parse\n\033[0m";
+}
+
+// Get the file
+$source = file_get_contents($argv[1]);
+
+// Create a new parser
+$basic = new Basic();
+$basic->interpret($source);
