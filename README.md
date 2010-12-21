@@ -1,7 +1,7 @@
 Basic
 =====
 
-I got bored one day so I wrote a BASIC parser. It's a pretty basic version BASIC with no support for functions or anything like that. The usage is simple
+I got bored one day so I wrote a BASIC parser. It's a pretty basic dialect BASIC with no support for functions or anything complex like that. The usage is simple
 
 	php basic.php name_of_basic_file.basic
 	

@@ -1,0 +1,10 @@
+' BASIC example file
+'
+' by Jamie Rumbelow
+' http://jamierumbelow.net
+
+' I'm not a BASIC programmer, so don't expect much of this.
+' It's simply a way of demonstrating a bit of what my Basic
+' interpreter can do.
+
+print "Hello, World!"
