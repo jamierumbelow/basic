@@ -7,4 +7,36 @@
 ' It's simply a way of demonstrating a bit of what my Basic
 ' interpreter can do.
 
-print "Hello, World!"
+' The welcome section
+welcome:
+    print "Welcome to the BASIC Bank\n"
+    print "=========================\n"
+    print "\n"
+    
+    goto new_account
+    
+' Setup a new account
+new_account:
+    print "What would you like to name your account?\n"
+    
+    input account_name
+    account_value = 0
+    
+    goto main
+    
+' The main loop
+main:
+    print "Welcome to your " + account_name + " bank account.\n"
+    print "What would you like to do? (withdraw, deposit, exit)\n"
+    input command
+    
+    if command = "exit" then leave
+    if command = "withdraw" then withdraw
+    if command = "deposit" then deposit
+
+' Leave
+leave:
+    exit
+    
+' Start off by welcoming the user
+goto welcome

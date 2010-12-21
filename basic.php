@@ -36,16 +36,16 @@ class Basic {
 	 * A big long list of constants for tokens. Each token represents
 	 * something in the class
 	 */
-	const T_WORD = 1;
-	const T_NUMBER = 2;
-	const T_STRING = 3;
-	const T_LABEL = 4;
-	const T_NEWLINE = 5;
-	const T_EQUALS = 6;
-	const T_OPERATOR = 7;
-	const T_LEFT_PARENTHESIES = 8;
-	const T_RIGHT_PARENTHESIES = 9;
-	const T_EOF = 10;
+	const TOKEN_WORD = 1;
+	const TOKEN_NUMBER = 2;
+	const TOKEN_STRING = 3;
+	const TOKEN_LABEL = 4;
+	const TOKEN_NEWLINE = 5;
+	const TOKEN_EQUALS = 6;
+	const TOKEN_OPERATOR = 7;
+	const TOKEN_LEFTOKEN_PARENTHESIES = 8;
+	const TOKEN_RIGHTOKEN_PARENTHESIES = 9;
+	const TOKEN_EOF = 10;
 	
 	/**
 	 * These constants represent the tokeniser's current state; the
@@ -71,7 +71,7 @@ class Basic {
 	public function interpret($source) {
 		// Tokenise
 		$tokens = $this->tokenise($source);
-		
+		die(var_dump($tokens));
 		// Parse
 		$parser = new Parser($tokens);
 		$statements = $parser->parse();
@@ -103,16 +103,16 @@ class Basic {
 		// Keep a one-to-one mapping of all the single-character tokens here
 		// in an array that we can pull out later.
 		$character_tokens = array(
-			"\n" => T_NEWLINE,
-			"=" => T_EQUALS,
-			"+" => T_OPERATOR,
-			"-" => T_OPERATOR,
-			"*" => T_OPERATOR,
-			"/" => T_OPERATOR,
-			"<" => T_OPERATOR,
-			">" => T_OPERATOR,
-			"(" => T_LEFT_PARENTHESIES,
-			")" => T_RIGHT_PARENTHESIES
+			"\n" => TOKEN_NEWLINE,
+			"=" => TOKEN_EQUALS,
+			"+" => TOKEN_OPERATOR,
+			"-" => TOKEN_OPERATOR,
+			"*" => TOKEN_OPERATOR,
+			"/" => TOKEN_OPERATOR,
+			"<" => TOKEN_OPERATOR,
+			">" => TOKEN_OPERATOR,
+			"(" => TOKEN_LEFT_PARENTHESIES,
+			")" => TOKEN_RIGHT_PARENTHESIES
 		);
 		
 		// Scan through each character of the source code at
@@ -129,43 +129,149 @@ class Basic {
 				 * to check for single-char tokens, as well as change state if we need to.
 				 */
 				case S_DEFAULT:
-					// Is our token inside the single character tokens array? If
+					// Is our character inside the single character tokens array? If
 					// so, get the token type and add a new token.
 					if (isset($character_tokens[$char])) {
 						$tokens[] = new Token($char, $character_tokens[$char]);
 					}
 					
-					// Is our token a letter? If it is, we're about to start a 'word'.
+					// Is our character a letter? If it is, we're about to start a 'word'.
 					// Words can represent either a label (for gotos) or a variable
 					else if (ctype_alpha($char)) {
 						$token .= $char;
 						$state = S_WORD;
 					}
 					
-					// Is our token a digit? If so, we're about to start a number.
+					// Is our character a digit? If so, we're about to start a number.
 					else if (is_numeric($char)) {
 						$token .= $char;
 						$state = S_NUMBER;
 					}
 					
-					// Is our token a quote? We're about to start a string
+					// Is our character a quote? We're about to start a string
 					else if ($char == '"') {
 						$state = S_STRING;
 					}
 					
-					// Is our token a single quote? Comment time
+					// Is our character a single quote? Comment time
 					else if ($char == "'") {
 						$state = S_COMMENT;
 					}
 					
 					break;
 				
-				default:
-					# code...
+				/**
+				 * The "word" state. We check the next character. If it's a letter or digit,
+				 * continue the word. If it ends with a colon, it's a label, otherwise it's a word.
+				 */
+				case S_WORD:
+					// Is our character a letter or digit? If it is, we're continuing the word
+					if (ctype_alnum($char)) {
+						$token .= $char;
+					}
+					
+					// Is our character a colon? It's a label
+					else if ($char == ":") {
+						$tokens[] = new Token($token, TOKEN_LABEL);
+						$token = "";
+						$state = S_DEFAULT;
+					}
+					
+					// Our word has ended
+					else {
+						// Add the token
+						$tokens[] = new Token($token, TOKEN_WORD);
+						
+						// Reset the state
+						$token = "";
+						$state = S_DEFAULT;
+						
+						// Reprocess the current character in S_DEFAULT
+						$i--;
+					}
+					
+					break;
+					
+				/**
+				 * The number state. If the next character is numeric, we're continuing the number.
+				 * Otherwise, add the new token.
+				 */
+				case S_NUMBER:
+					// Is it numeric?
+					if (is_numeric($char)) {
+						$token .= $char;
+					}
+					
+					// We're done. Add the token
+					else {
+						// Add the token
+						$tokens[] = new Token($token, TOKEN_NUMBER);
+						
+						// Reset the state
+						$token = "";
+						$state = S_DEFAULT;
+						
+						// Reprocess the current character in S_DEFAULT
+						$i--;
+					}
+					
+					break;
+					
+				/**
+				 * The string state. Any character can be in a string except a quote, so whack it on.
+				 */
+				case S_STRING:
+					// Is it a quote?
+					if ($char == '"') {
+						// Add the token
+						$tokens[] = new Token($token, TOKEN_STRING);
+						
+						// Reset the state
+						$token = "";
+						$state = S_DEFAULT;
+					}
+					
+					// Continue with our string
+					else {
+						$token .= $char;
+					}
+					
+				/**
+				 * The comment state. Comments are terminated by a newline, so check for that. We're just
+				 * ignoring it if it's a comment, because the parser doesn't give a damn.
+				 */
+				case S_COMMENT:
+					// Is it a newline?
+					if ($char == "\n") {
+						// Reset the state
+						$state = S_DEFAULT;
+					}
+					
 					break;
 			}
 		}
 		
 		return $tokens;
+	}
+}
+
+/**
+ * Token represents a single token in the lexer.
+ * It's just a simple structure to store data.
+ *
+ * @package basic
+ * @author Jamie Rumbelow
+ **/
+class Token {
+	public $token;
+	public $type;
+	
+	public function __construct($token, $type) {
+		$this->token = $token;
+		$this->type = $type;
+	}
+	
+	public function __tostring() {
+		return (string)$this->type . ": <" . $this->token . ">";
 	}
 }
