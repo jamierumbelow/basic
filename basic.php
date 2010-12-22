@@ -770,11 +770,11 @@ class BasicParserException extends Exception { }
 if (!isset($argv[1])) {
 	echo "\033[0;32mUsage: php basic.php <file>\n";
 	echo "\tWhere <file> is the basic file to parse\n\033[0m";
+} else {
+	// Get the file
+	$source = file_get_contents($argv[1]);
+
+	// Create a new parser
+	$basic = new Basic();
+	$basic->interpret($source);
 }
-
-// Get the file
-$source = file_get_contents($argv[1]);
-
-// Create a new parser
-$basic = new Basic();
-$basic->interpret($source);
