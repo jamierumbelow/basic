@@ -73,8 +73,8 @@ class Basic {
 		
 		// Loop through the statements and execute them
 		while (self::$current_statement < count(self::$statements)) {
-			self::$current_statement++;
 			self::$statements[self::$current_statement]->execute();
+			self::$current_statement++;
 		}
 	}
 	
@@ -553,7 +553,7 @@ class Parser {
 		else if ($this->match(TOKEN_LEFT_PARENTHESIES)) {
 			// Parse the expression and find the closing parenthesis
 			$expression = $this->expression();
-			$this->token_type(TOKEN_RIGHT_PARENTHESIES);
+			$this->position++;
 			
 			// Return the expression
 			return $expression;
