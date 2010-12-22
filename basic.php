@@ -21,7 +21,7 @@ class Basic {
 	
 	/**
 	 * A big long list of constants for tokens. Each token represents
-	 * something in the class
+	 * something in the code
 	 */
 	const TOKEN_WORD = 1;
 	const TOKEN_NUMBER = 2;
@@ -769,7 +769,7 @@ class BasicParserException extends Exception { }
 // We need a file argument
 if (!isset($argv[1])) {
 	echo "\033[0;32mUsage: php basic.php <file>\n";
-	echo "\tWhere <file> is the basic file to parse\n\033[0m";
+	echo "\tWhere <file> is the BASIC file to parse\n\033[0m";
 } else {
 	// Get the file
 	$source = file_get_contents($argv[1]);
