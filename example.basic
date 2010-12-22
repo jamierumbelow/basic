@@ -7,6 +7,9 @@
 ' It's simply a way of demonstrating a bit of what my Basic
 ' interpreter can do.
 
+' Start off by welcoming the user
+goto welcome
+
 ' The welcome section
 welcome:
     print "Welcome to the BASIC Bank"
@@ -24,9 +27,31 @@ new_account:
     
     goto main
     
+' Withdraw
+withdraw:
+    print "How much would you like to withdraw?"
+    
+    input withdrawal_amount
+    account_value = account_value - withdrawal_amount
+    
+    goto main
+    
+' Deposit
+deposit:
+    print "How much would you like to deposit?"
+
+    input deposit_amount
+    account_value = account_value + deposit_amount
+    
+    goto main
+    
 ' The main loop
 main:
+    print ""
     print "Welcome to your " + account_name + " bank account."
+    print ""
+    print "You have £" + account_value + " in your account"
+    print ""
     print "What would you like to do? (withdraw, deposit, exit)"
     input command
     
@@ -37,6 +62,3 @@ main:
 ' Leave
 leave:
     exit
-    
-' Start off by welcoming the user
-goto welcome

@@ -72,8 +72,9 @@ class Basic {
 		$parser->parse();
 		
 		// Loop through the statements and execute them
-		foreach (self::$statements as $statement) {
-			$statement->execute();
+		while (self::$current_statement < count(self::$statements)) {
+			self::$current_statement++;
+			self::$statements[self::$current_statement]->execute();
 		}
 	}
 	
@@ -160,7 +161,7 @@ class Basic {
 				 */
 				case S_WORD:
 					// Is our character a letter or digit? If it is, we're continuing the word
-					if (ctype_alnum($char)) {
+					if (ctype_alnum($char) || $char == '_') {
 						$token .= $char;
 					}
 					
@@ -305,7 +306,7 @@ class Parser {
 		
 		// Infinite loop; we'll use $this->position to keep
 		// track of when we're done
-		while (TRUE) {			
+		while (TRUE) {
 			// Is this a label?
 			if ($this->match(TOKEN_LABEL)) {
 				// Record this label, linking it to the current index of the 
@@ -317,7 +318,8 @@ class Parser {
 			else if ($this->match(TOKEN_WORD, TOKEN_EQUALS)) {
 				// Create a new assignment statement with the current token text (the variable's name), and
 				// parse the expression
-				$statements[] = new AssignmentStatement($this->current()->token, $this->expression());
+				$this->position++;
+				$statements[] = new AssignmentStatement($this->previous(1)->token, $this->expression());
 			}
 			
 			// Is it a print statement?
@@ -331,15 +333,17 @@ class Parser {
 			else if ($this->current()->token == "input") {
 				// Get the next token (variable name) and create new input statement
 				// We're using next_token() to ensure that the next token is indeed a TOKEN_WORD.
-				$this->position++;
 				$statements[] = new InputStatement($this->next_token(TOKEN_WORD)->token);
+				$this->position++;
+				$this->position++;
 			}
 			
 			// Is it a goto statement?
 			else if ($this->current()->token == "goto") {
 				// Similar to above, get the next token (label to go to) and create new goto statement
-				$this->position++;
 				$statements[] = new GotoStatement($this->next_token(TOKEN_WORD)->token);
+				$this->position++;
+				$this->position++;
 			}
 			
 			// Is it an if statement?
@@ -349,11 +353,10 @@ class Parser {
 				$this->position++;
 				$condition = $this->expression();
 				
-				// Then we want the "then" (using next_token_word() to check the $token->token value)
-				$this->next_token_word("then");
-				
 				// Then we want the label to go to
 				$label = $this->next_token(TOKEN_WORD)->token;
+				$this->position++;
+				$this->position++;
 				
 				// Create the new statement
 				$statements[] = new IfThenStatement($condition, $label);
@@ -454,9 +457,9 @@ class Parser {
 	 * @author Jamie Rumbelow
 	 */
 	public function match($token_one, $token_two = FALSE) {
-		if (!$token_two) {			
+		if (!$token_two) {
 			// Compare and return
-			if ((bool)($this->previous()->type == $token_one)) {
+			if ($this->current()->type == $token_one) {
 				// Increment the position
 				$this->position++;
 				
@@ -471,7 +474,7 @@ class Parser {
 			// Check the first compares with the current
 			if ($this->current()->type == $token_one) {
 				// Check the second compares
-				if ($this->next()->type == $token_one) {
+				if ($this->next()->type == $token_two) {
 					// Increment the position
 					$this->position++;
 					
@@ -508,7 +511,7 @@ class Parser {
 		$expression = $this->atomic();
 		
 		// As long as we have operators, keep building operator expressions
-		while ($this->next_token(TOKEN_OPERATOR) || $this->next_token(TOKEN_EQUALS)) {
+		while ($this->match(TOKEN_OPERATOR) || $this->match(TOKEN_EQUALS)) {
 			// Get the operator
 			$operator = $this->previous()->token;
 			
@@ -599,7 +602,7 @@ class InputStatement implements Statement {
 	}
 	
 	public function execute() {
-		Basic::$variables[$this->variable] = fgets(fopen("php://stdin","r"));
+		Basic::$variables[$this->variable] = trim(fgets(fopen("php://stdin","r")));
 	}
 }
 
@@ -646,6 +649,15 @@ class IfThenStatement implements Statement {
 			$goto = new GotoStatement($this->label);
 			$goto->execute();
 		}
+	}
+}
+
+/**
+ * A simple statement to exit program flow
+ */
+class ExitStatement implements Statement {
+	public function execute() {
+		exit;
 	}
 }
 
@@ -745,7 +757,7 @@ class OperatorExpression implements Expression {
 				break;
 		}
 		
-		throw new BasicParserException("Unknown operator");
+		throw new BasicParserException("Unknown operator '".$this->operator."'");
 	}
 }
 
